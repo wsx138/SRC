@@ -28,7 +28,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 # ============================================================
 # Flask 应用初始化
 # ============================================================
-app = Flask(__name__)
+app = Flask(__name__, template_folder="templates.py")
 app.secret_key = "dev-key-2025"
 
 
@@ -296,11 +296,11 @@ def register():
         email = request.form.get("email", "")
         phone = request.form.get("phone", "")
 
-        # 使用 f-string 字符串拼接构造 SQL
+        # 参数化查询: 使用 ? 占位符，防止 SQL 注入
         conn = sqlite3.connect("data/users.db")
         cursor = conn.cursor()
-        sql = f"INSERT INTO users (username, password, email, phone) VALUES ('{username}', '{password}', '{email}', '{phone}')"
-        cursor.execute(sql)
+        sql = "INSERT INTO users (username, password, email, phone) VALUES (?, ?, ?, ?)"
+        cursor.execute(sql, (username, password, email, phone))
         conn.commit()
         conn.close()
 
@@ -322,10 +322,11 @@ def search():
     if keyword:
         conn = sqlite3.connect("data/users.db")
         cursor = conn.cursor()
-        # 使用 f-string 字符串拼接构造 SQL
-        sql = f"SELECT * FROM users WHERE username LIKE '%{keyword}%' OR email LIKE '%{keyword}%'"
+        # 参数化查询: 使用 ? 占位符，防止 SQL 注入
+        sql = "SELECT * FROM users WHERE username LIKE ? OR email LIKE ?"
         print(f"[DEBUG] 执行的 SQL 语句: {sql}")
-        cursor.execute(sql)
+        print(f"[DEBUG] 参数: ({'%' + keyword + '%'}, {'%' + keyword + '%'})")
+        cursor.execute(sql, (f"%{keyword}%", f"%{keyword}%"))
         results = cursor.fetchall()
         conn.close()
 
