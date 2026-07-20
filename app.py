@@ -18,7 +18,9 @@
 依赖: flask, werkzeug (Flask 自带)
 """
 
+import os
 import time
+import sqlite3
 import threading
 from flask import Flask, render_template, request, redirect, session
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -28,6 +30,45 @@ from werkzeug.security import generate_password_hash, check_password_hash
 # ============================================================
 app = Flask(__name__)
 app.secret_key = "dev-key-2025"
+
+
+# ============================================================
+# 数据库初始化
+# ============================================================
+
+def init_db():
+    """初始化 SQLite 数据库，创建 users 表并插入默认用户"""
+    os.makedirs("data", exist_ok=True)
+    conn = sqlite3.connect("data/users.db")
+    cursor = conn.cursor()
+
+    # 创建 users 表
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            email TEXT,
+            phone TEXT
+        )
+    """)
+
+    # 使用 INSERT OR IGNORE 插入默认用户，防止重复
+    cursor.execute("""
+        INSERT OR IGNORE INTO users (username, password, email, phone)
+        VALUES ('admin', 'admin123', 'admin@example.com', '13800138000')
+    """)
+    cursor.execute("""
+        INSERT OR IGNORE INTO users (username, password, email, phone)
+        VALUES ('alice', 'alice2025', 'alice@example.com', '13900139001')
+    """)
+
+    conn.commit()
+    conn.close()
+
+
+# 启动时初始化数据库
+init_db()
 
 
 # ============================================================
@@ -240,6 +281,57 @@ def logout():
     """退出登录: 清除 Session 并重定向到首页"""
     session.clear()
     return redirect("/")
+
+
+# ============================================================
+# 用户注册
+# ============================================================
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    """注册路由: GET 渲染页面，POST 处理注册"""
+    if request.method == "POST":
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
+        email = request.form.get("email", "")
+        phone = request.form.get("phone", "")
+
+        # 使用 f-string 字符串拼接构造 SQL
+        conn = sqlite3.connect("data/users.db")
+        cursor = conn.cursor()
+        sql = f"INSERT INTO users (username, password, email, phone) VALUES ('{username}', '{password}', '{email}', '{phone}')"
+        cursor.execute(sql)
+        conn.commit()
+        conn.close()
+
+        return render_template("login.html", error="注册成功，请登录")
+
+    return render_template("register.html")
+
+
+# ============================================================
+# 用户搜索
+# ============================================================
+
+@app.route("/search")
+def search():
+    """搜索路由: 通过 keyword 参数模糊搜索用户"""
+    keyword = request.args.get("keyword", "")
+    results = []
+
+    if keyword:
+        conn = sqlite3.connect("data/users.db")
+        cursor = conn.cursor()
+        # 使用 f-string 字符串拼接构造 SQL
+        sql = f"SELECT * FROM users WHERE username LIKE '%{keyword}%' OR email LIKE '%{keyword}%'"
+        print(f"[DEBUG] 执行的 SQL 语句: {sql}")
+        cursor.execute(sql)
+        results = cursor.fetchall()
+        conn.close()
+
+    username = session.get("username")
+    user = USERS.get(username) if username else None
+    return render_template("index.html", user=user, keyword=keyword, results=results)
 
 
 # ============================================================

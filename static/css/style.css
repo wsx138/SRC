@@ -185,3 +185,69 @@ body {
     color: #333;
     font-size: 14px;
 }
+
+/* 搜索区域 */
+.search-section {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid #eee;
+}
+
+.search-section h3 {
+    font-size: 16px;
+    margin-bottom: 12px;
+    color: #333;
+}
+
+.search-form {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.search-input {
+    flex: 1;
+}
+
+.btn-search {
+    background: #667eea;
+    color: #fff;
+    white-space: nowrap;
+    padding: 10px 20px;
+}
+
+/* 搜索结果表格 */
+.search-results {
+    margin-top: 16px;
+}
+
+.search-results h3 {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 10px;
+}
+
+.result-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.result-table th {
+    background: #f5f7fa;
+    text-align: left;
+    padding: 8px 12px;
+    color: #555;
+    font-weight: 600;
+    border-bottom: 2px solid #e0e0e0;
+}
+
+.result-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #f0f0f0;
+    color: #333;
+}
+
+.result-table tr:hover {
+    background: #f9fafb;
+}
