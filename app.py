@@ -19,11 +19,16 @@
 """
 
 import os
+import io
 import uuid
-import time
+import imghdr
 import sqlite3
+import time
+import shutil
+import tempfile
 import threading
 from flask import Flask, render_template, request, redirect, session, send_from_directory
+from PIL import Image, UnidentifiedImageError
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
@@ -339,45 +344,143 @@ def search():
 
 
 # ============================================================
-# 头像上传
+# 头像上传（安全加固专业版）
 # ============================================================
 
-# 允许的头像文件扩展名（白名单）
-ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp", "bmp"}
+# --- 白名单配置（多层交叉校验）---
 
-# 上传文件存储目录（在 static 之外，防止直接执行）
+# 层级 1: 扩展名白名单 — 文件名层面
+ALLOWED_EXTENSIONS = frozenset({"png", "jpg", "jpeg", "gif", "webp", "bmp"})
+
+# 层级 2: 浏览器 Content-Type 白名单 — HTTP 头部层面
+ALLOWED_MIMETYPES = frozenset({
+    "image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp",
+})
+
+# 层级 3: 魔术字节（magic bytes）白名单 — 文件内容层面
+# imghdr 支持的图片格式
+ALLOWED_IMGHDR_TYPES = frozenset({"png", "jpeg", "gif", "webp"})
+
+# 单文件最大尺寸（应用层二次检查）
+MAX_AVATAR_SIZE = 5 * 1024 * 1024  # 5 MB
+
+# 存储目录（非 static 目录）
 UPLOAD_DIR = "data/uploads"
 
 
-def _allowed_file(filename: str) -> bool:
+# --- 核心校验函数 ---
+
+def _check_file_type_magic(raw_data: bytes) -> str | None:
     """
-    校验文件扩展名是否在允许的白名单内。
+    层级 3: 魔术字节校验。
+    通过文件前几个字节（magic bytes）判断真实文件类型，
+    防止攻击者将 .php 改名为 .jpg 绕过扩展名检查。
 
     Args:
-        filename: 原始文件名
+        raw_data: 文件内容字节流
 
     Returns:
-        True 表示允许上传
+        小写的真实图片类型（png/jpeg/gif/webp），非图片返回 None
     """
-    if "." not in filename:
-        return False
-    ext = filename.rsplit(".", 1)[1].lower()
-    return ext in ALLOWED_EXTENSIONS
+    # imghdr.what 读取文件头魔术字节判断类型
+    detected = imghdr.what(None, h=raw_data[:32])
+    if detected is not None and detected in ALLOWED_IMGHDR_TYPES:
+        return detected
+    return None
 
+
+def _is_valid_image(raw_data: bytes) -> bool:
+    """
+    层级 4: 图片结构完整性校验。
+    使用 PIL/Pillow 尝试打开并验证图片，确保文件不是：
+    - 伪造的图片头部 + 任意数据
+    - 损坏的图片文件
+    - 包含恶意 payload 的图片（重新编码后清除）
+
+    同时通过 PIL 重新编码图片，剥离 EXIF 元数据，
+    防止隐私信息泄露（如 GPS 坐标）。
+
+    Returns:
+        True 表示图片有效且可被安全编码
+    """
+    try:
+        img = Image.open(io.BytesIO(raw_data))
+        img.verify()  # 验证图片结构完整性（不加载像素，仅检查文件头）
+    except (UnidentifiedImageError, Exception):
+        return False
+
+    # 二次校验：verify 之后需要重新打开才能操作
+    try:
+        img = Image.open(io.BytesIO(raw_data))
+        # 检查尺寸，防止解压炸弹（pixel flood attack）
+        width, height = img.size
+        if width * height > 100_000_000:  # 1 亿像素上限
+            return False
+    except Exception:
+        return False
+
+    return True
+
+
+def _sanitize_and_save(file_data: bytes, extension: str) -> str:
+    """
+    安全保存图片文件。
+
+    步骤：
+    1. 通过 PIL 重新编码图片，剥离 EXIF 元数据和潜在恶意 payload
+    2. 原子写入（临时文件 + os.replace）确保写入完整性
+    3. 设置安全的文件权限（仅所有者可读写）
+
+    Args:
+        file_data: 原始文件字节
+        extension: 输出文件扩展名（不含点）
+
+    Returns:
+        最终存储的文件名
+    """
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    unique_name = f"{uuid.uuid4().hex}.{extension}"
+
+    try:
+        img = Image.open(io.BytesIO(file_data))
+
+        # 转换为 RGB 后重新编码（剥离 EXIF、恶意 payload）
+        if img.mode in ("RGBA", "P", "LA", "PA"):
+            # 带透明通道的转 RGBA
+            img = img.convert("RGBA")
+        elif img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+
+        # 原子写入：先写临时文件，再 rename
+        tmp_fd, tmp_path = tempfile.mkstemp(dir=UPLOAD_DIR, suffix=f".{extension}")
+        os.close(tmp_fd)
+
+        img.save(tmp_path, format=img.format or extension.upper(), quality=85)
+
+        final_path = os.path.join(UPLOAD_DIR, unique_name)
+        os.replace(tmp_path, final_path)  # 原子 rename
+
+        return unique_name
+
+    except Exception:
+        # 清理临时文件
+        for p in (tmp_path if 'tmp_path' in dir() else None,):
+            if p and os.path.exists(p):
+                os.unlink(p)
+        raise
+
+
+# --- 路由 ---
 
 @app.route("/uploads/<path:filename>")
 def uploaded_file(filename):
-    """
-    安全地提供上传文件的访问。
-    使用 send_from_directory 防止目录穿越攻击。
-    """
+    """安全文件访问: send_from_directory 内置路径穿越防护"""
     return send_from_directory(UPLOAD_DIR, filename)
 
 
 @app.route("/upload", methods=["GET", "POST"])
 def upload():
-    """头像上传路由: GET 渲染页面，POST 处理文件上传"""
-    # 需要登录才能访问
+    """头像上传路由 — 多层安全校验"""
     if not session.get("username"):
         return redirect("/login")
 
@@ -386,31 +489,64 @@ def upload():
         if not file or not file.filename:
             return render_template("upload.html", error="请选择一个文件")
 
-        # 1. 扩展名白名单校验
-        if not _allowed_file(file.filename):
-            return render_template("upload.html", error="不支持的文件类型，仅允许上传图片文件")
+        # ====== 层级 1: 扩展名白名单 ======
+        if "." not in file.filename:
+            return render_template("upload.html",
+                error="不支持的文件类型，仅允许上传图片文件 (png, jpg, jpeg, gif, webp, bmp)")
 
-        # 2. 安全处理文件名（移除路径穿越字符、特殊字符）
+        original_ext = file.filename.rsplit(".", 1)[1].lower()
+        if original_ext not in ALLOWED_EXTENSIONS:
+            return render_template("upload.html",
+                error=f"不支持的文件类型 (.{original_ext})，仅允许: {', '.join(sorted(ALLOWED_EXTENSIONS))}")
+
+        # ====== 层级 2: Content-Type 头部校验 ======
+        content_type = file.content_type or ""
+        if content_type and content_type not in ALLOWED_MIMETYPES:
+            return render_template("upload.html",
+                error=f"不支持的文件格式 ({content_type})")
+
+        # ====== 应用层文件大小校验 ======
+        file.stream.seek(0, os.SEEK_END)
+        file_size = file.stream.tell()
+        file.stream.seek(0)
+        if file_size > MAX_AVATAR_SIZE:
+            return render_template("upload.html",
+                error=f"文件过大 ({file_size / 1024 / 1024:.1f} MB)，最大允许 5 MB")
+
+        # 读取文件内容到内存（用于魔术字节和图片验证）
+        raw_data = file.read()
+
+        # ====== 层级 3: 魔术字节校验 ======
+        detected_type = _check_file_type_magic(raw_data)
+        if detected_type is None:
+            return render_template("upload.html",
+                error="文件内容不是有效图片类型，上传被拒绝")
+
+        # ====== 层级 4: PIL 图片结构完整性校验 ======
+        if not _is_valid_image(raw_data):
+            return render_template("upload.html",
+                error="图片文件已损坏或无法识别，上传被拒绝")
+
+        # ====== 文件名安全处理 ======
         safe_name = secure_filename(file.filename)
         if not safe_name:
             return render_template("upload.html", error="文件名无效")
 
-        # 3. 使用 UUID 重命名存储，避免文件名冲突和覆盖攻击
-        ext = safe_name.rsplit(".", 1)[1].lower() if "." in safe_name else ""
-        unique_name = f"{uuid.uuid4().hex}.{ext}"
-        original_name = safe_name
-
-        # 4. 保存到 non-static 目录
-        os.makedirs(UPLOAD_DIR, exist_ok=True)
-        filepath = os.path.join(UPLOAD_DIR, unique_name)
-        file.save(filepath)
+        # ====== 安全保存（PIL 重编码 + 原子写入 + UUID 重命名）=====
+        try:
+            # 使用魔术字节检测到的真实类型作为最终扩展名
+            save_ext = detected_type if detected_type != "jpeg" else "jpg"
+            unique_name = _sanitize_and_save(raw_data, save_ext)
+        except Exception:
+            return render_template("upload.html",
+                error="图片保存失败，请重试")
 
         file_url = f"/uploads/{unique_name}"
         return render_template(
             "upload.html",
             success=True,
             file_url=file_url,
-            filename=original_name,
+            filename=safe_name,
         )
 
     return render_template("upload.html")
