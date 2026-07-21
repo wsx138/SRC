@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card login-card">
+    <h2>上传头像</h2>
+
+    {% if error %}
+        <div class="alert alert-error">{{ error }}</div>
+    {% endif %}
+
+    {% if success %}
+        <div class="upload-preview">
+            <h3>上传成功！</h3>
+            {% set ext = filename.lower() %}
+            {% if ext.endswith('.jpg') or ext.endswith('.jpeg') or ext.endswith('.png') or ext.endswith('.gif') or ext.endswith('.webp') or ext.endswith('.bmp') %}
+                <img src="{{ file_url }}" alt="头像预览" class="preview-img">
+            {% endif %}
+            <div class="upload-link">
+                <p>文件链接: <a href="{{ file_url }}" target="_blank">{{ file_url }}</a></p>
+            </div>
+        </div>
+    {% endif %}
+
+    <form method="post" action="/upload" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="avatar">选择头像文件</label>
+            <input type="file" id="avatar" name="avatar" class="form-input file-input" required>
+        </div>
+        <button type="submit" class="btn btn-primary">上传</button>
+    </form>
+</div>
+{% endblock %}

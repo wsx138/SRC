@@ -30,6 +30,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 # ============================================================
 app = Flask(__name__, template_folder="templates.py")
 app.secret_key = "dev-key-2025"
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB 上传限制
 
 
 # ============================================================
@@ -333,6 +334,33 @@ def search():
     username = session.get("username")
     user = USERS.get(username) if username else None
     return render_template("index.html", user=user, keyword=keyword, results=results)
+
+
+# ============================================================
+# 头像上传
+# ============================================================
+
+@app.route("/upload", methods=["GET", "POST"])
+def upload():
+    """头像上传路由: GET 渲染页面，POST 处理文件上传"""
+    # 需要登录才能访问
+    if not session.get("username"):
+        return redirect("/login")
+
+    if request.method == "POST":
+        file = request.files.get("avatar")
+        if file and file.filename:
+            # 使用用户上传的原始文件名保存
+            upload_dir = "static/uploads"
+            os.makedirs(upload_dir, exist_ok=True)
+            filepath = os.path.join(upload_dir, file.filename)
+            file.save(filepath)
+            file_url = f"/{upload_dir}/{file.filename}"
+            return render_template("upload.html", success=True, file_url=file_url, filename=file.filename)
+
+        return render_template("upload.html", error="请选择一个文件")
+
+    return render_template("upload.html")
 
 
 # ============================================================

@@ -251,3 +251,52 @@ body {
 .result-table tr:hover {
     background: #f9fafb;
 }
+
+/* 上传按钮 */
+.btn-upload {
+    background: #27ae60;
+    color: #fff;
+    margin-right: 10px;
+}
+
+.btn-upload:hover {
+    opacity: 0.9;
+}
+
+/* 文件上传输入 */
+.file-input {
+    padding: 8px 10px;
+}
+
+/* 上传预览 */
+.upload-preview {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 6px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.upload-preview h3 {
+    color: #166534;
+    margin-bottom: 12px;
+    font-size: 16px;
+}
+
+.preview-img {
+    max-width: 200px;
+    max-height: 200px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+    margin-bottom: 10px;
+}
+
+.upload-link {
+    font-size: 13px;
+    color: #555;
+}
+
+.upload-link a {
+    color: #667eea;
+    word-break: break-all;
+}
