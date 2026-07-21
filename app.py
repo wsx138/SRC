@@ -19,11 +19,13 @@
 """
 
 import os
+import uuid
 import time
 import sqlite3
 import threading
-from flask import Flask, render_template, request, redirect, session
+from flask import Flask, render_template, request, redirect, session, send_from_directory
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 
 # ============================================================
 # Flask 应用初始化
@@ -340,6 +342,38 @@ def search():
 # 头像上传
 # ============================================================
 
+# 允许的头像文件扩展名（白名单）
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp", "bmp"}
+
+# 上传文件存储目录（在 static 之外，防止直接执行）
+UPLOAD_DIR = "data/uploads"
+
+
+def _allowed_file(filename: str) -> bool:
+    """
+    校验文件扩展名是否在允许的白名单内。
+
+    Args:
+        filename: 原始文件名
+
+    Returns:
+        True 表示允许上传
+    """
+    if "." not in filename:
+        return False
+    ext = filename.rsplit(".", 1)[1].lower()
+    return ext in ALLOWED_EXTENSIONS
+
+
+@app.route("/uploads/<path:filename>")
+def uploaded_file(filename):
+    """
+    安全地提供上传文件的访问。
+    使用 send_from_directory 防止目录穿越攻击。
+    """
+    return send_from_directory(UPLOAD_DIR, filename)
+
+
 @app.route("/upload", methods=["GET", "POST"])
 def upload():
     """头像上传路由: GET 渲染页面，POST 处理文件上传"""
@@ -349,16 +383,35 @@ def upload():
 
     if request.method == "POST":
         file = request.files.get("avatar")
-        if file and file.filename:
-            # 使用用户上传的原始文件名保存
-            upload_dir = "static/uploads"
-            os.makedirs(upload_dir, exist_ok=True)
-            filepath = os.path.join(upload_dir, file.filename)
-            file.save(filepath)
-            file_url = f"/{upload_dir}/{file.filename}"
-            return render_template("upload.html", success=True, file_url=file_url, filename=file.filename)
+        if not file or not file.filename:
+            return render_template("upload.html", error="请选择一个文件")
 
-        return render_template("upload.html", error="请选择一个文件")
+        # 1. 扩展名白名单校验
+        if not _allowed_file(file.filename):
+            return render_template("upload.html", error="不支持的文件类型，仅允许上传图片文件")
+
+        # 2. 安全处理文件名（移除路径穿越字符、特殊字符）
+        safe_name = secure_filename(file.filename)
+        if not safe_name:
+            return render_template("upload.html", error="文件名无效")
+
+        # 3. 使用 UUID 重命名存储，避免文件名冲突和覆盖攻击
+        ext = safe_name.rsplit(".", 1)[1].lower() if "." in safe_name else ""
+        unique_name = f"{uuid.uuid4().hex}.{ext}"
+        original_name = safe_name
+
+        # 4. 保存到 non-static 目录
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+        filepath = os.path.join(UPLOAD_DIR, unique_name)
+        file.save(filepath)
+
+        file_url = f"/uploads/{unique_name}"
+        return render_template(
+            "upload.html",
+            success=True,
+            file_url=file_url,
+            filename=original_name,
+        )
 
     return render_template("upload.html")
 
