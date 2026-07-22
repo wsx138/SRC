@@ -57,9 +57,16 @@ def init_db():
             username TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL,
             email TEXT,
-            phone TEXT
+            phone TEXT,
+            balance REAL DEFAULT 0
         )
     """)
+
+    # 兼容旧表: 如果已有表但缺少 balance 列，则添加
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN balance REAL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # 列已存在，忽略
 
     # 使用 INSERT OR IGNORE 插入默认用户，防止重复
     cursor.execute("""
@@ -69,6 +76,14 @@ def init_db():
     cursor.execute("""
         INSERT OR IGNORE INTO users (username, password, email, phone)
         VALUES ('alice', 'alice2025', 'alice@example.com', '13900139001')
+    """)
+
+    # 初始化默认余额
+    cursor.execute("""
+        UPDATE users SET balance = 99999 WHERE username = 'admin' AND balance = 0
+    """)
+    cursor.execute("""
+        UPDATE users SET balance = 100 WHERE username = 'alice' AND balance = 0
     """)
 
     conn.commit()
@@ -341,6 +356,74 @@ def search():
     username = session.get("username")
     user = USERS.get(username) if username else None
     return render_template("index.html", user=user, keyword=keyword, results=results)
+
+
+# ============================================================
+# 个人中心 & 充值
+# ============================================================
+
+@app.route("/profile")
+def profile():
+    """个人中心: 通过 user_id 参数查看任意用户资料"""
+    user_id = request.args.get("user_id", "")
+
+    profile_user = None
+    if user_id:
+        conn = sqlite3.connect("data/users.db")
+        cursor = conn.cursor()
+        sql = f"SELECT id, username, password, email, phone FROM users WHERE id = {user_id}"
+        print(f"[DEBUG] 执行的 SQL 语句: {sql}")
+        cursor.execute(sql)
+        row = cursor.fetchone()
+        conn.close()
+
+        if row:
+            profile_user = {
+                "id": row[0],
+                "username": row[1],
+                "email": row[3],
+                "phone": row[4],
+            }
+
+    # 从内存字典获取当前登录用户信息（用于导航栏）
+    username = session.get("username")
+    current_user = USERS.get(username) if username else None
+
+    # 从数据库获取余额
+    balance = None
+    if profile_user:
+        conn = sqlite3.connect("data/users.db")
+        cursor = conn.cursor()
+        sql2 = f"SELECT balance FROM users WHERE id = {user_id}"
+        print(f"[DEBUG] 执行的 SQL 语句: {sql2}")
+        cursor.execute(sql2)
+        bal_row = cursor.fetchone()
+        conn.close()
+        if bal_row:
+            balance = bal_row[0]
+
+    return render_template("profile.html",
+                           user=current_user,
+                           profile_user=profile_user,
+                           balance=balance,
+                           user_id=user_id)
+
+
+@app.route("/recharge", methods=["POST"])
+def recharge():
+    """充值路由: 修改用户余额"""
+    user_id = request.form.get("user_id", "")
+    amount = request.form.get("amount", "0")
+
+    conn = sqlite3.connect("data/users.db")
+    cursor = conn.cursor()
+    sql = f"UPDATE users SET balance = balance + {amount} WHERE id = {user_id}"
+    print(f"[DEBUG] 执行的 SQL 语句: {sql}")
+    cursor.execute(sql)
+    conn.commit()
+    conn.close()
+
+    return redirect(f"/profile?user_id={user_id}")
 
 
 # ============================================================

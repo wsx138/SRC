@@ -263,6 +263,34 @@ body {
     opacity: 0.9;
 }
 
+/* 个人中心按钮 */
+.btn-profile {
+    background: #f39c12;
+    color: #fff;
+    margin-right: 10px;
+}
+
+.btn-profile:hover {
+    opacity: 0.9;
+}
+
+/* 返回按钮 */
+.btn-back {
+    background: #95a5a6;
+    color: #fff;
+    margin-top: 10px;
+}
+
+.btn-back:hover {
+    opacity: 0.9;
+}
+
+/* 余额显示 */
+.balance-value {
+    color: #e74c3c;
+    font-weight: 600;
+}
+
 /* 文件上传输入 */
 .file-input {
     padding: 8px 10px;

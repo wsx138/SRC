@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+{% if profile_user %}
+    <div class="card">
+        <h2>个人中心</h2>
+        <div class="user-info">
+            <div class="info-row"><span class="info-label">用户 ID</span><span class="info-value">{{ profile_user.id }}</span></div>
+            <div class="info-row"><span class="info-label">用户名</span><span class="info-value">{{ profile_user.username }}</span></div>
+            <div class="info-row"><span class="info-label">邮箱</span><span class="info-value">{{ profile_user.email }}</span></div>
+            <div class="info-row"><span class="info-label">手机</span><span class="info-value">{{ profile_user.phone }}</span></div>
+            <div class="info-row"><span class="info-label">余额</span><span class="info-value balance-value">¥ {{ balance if balance is not none else '0' }}</span></div>
+        </div>
+
+        <!-- 充值表单 -->
+        <div class="search-section">
+            <h3>账户充值</h3>
+            <form method="post" action="/recharge" class="recharge-form">
+                <input type="hidden" name="user_id" value="{{ user_id }}">
+                <div class="form-group">
+                    <label for="amount">充值金额</label>
+                    <input type="text" id="amount" name="amount" class="form-input" placeholder="请输入充值金额" required>
+                </div>
+                <button type="submit" class="btn btn-primary">充值</button>
+            </form>
+        </div>
+
+        <a href="/" class="btn btn-back">返回首页</a>
+    </div>
+{% else %}
+    <div class="card">
+        <h2>用户不存在</h2>
+        <p>未找到该用户，请检查用户 ID 是否正确。</p>
+        <a href="/" class="btn btn-primary">返回首页</a>
+    </div>
+{% endif %}
+{% endblock %}
