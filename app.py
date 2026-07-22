@@ -21,7 +21,6 @@
 import os
 import io
 import uuid
-import imghdr
 import sqlite3
 import time
 import shutil
@@ -441,7 +440,16 @@ ALLOWED_MIMETYPES = frozenset({
 })
 
 # 层级 3: 魔术字节（magic bytes）白名单 — 文件内容层面
-# imghdr 支持的图片格式
+# 自定义魔术字节检测，兼容 Python 3.13+ (imghdr 已在 3.13 中移除)
+# 格式: (magic_bytes, offset, type_name)
+_MAGIC_SIGNATURES = [
+    (b"\x89PNG\r\n\x1a\n", 0, "png"),
+    (b"\xff\xd8\xff", 0, "jpeg"),
+    (b"GIF87a", 0, "gif"),
+    (b"GIF89a", 0, "gif"),
+    (b"RIFF", 0, "webp"),  # 需要进一步校验 WEBP 标识
+]
+
 ALLOWED_IMGHDR_TYPES = frozenset({"png", "jpeg", "gif", "webp"})
 
 # 单文件最大尺寸（应用层二次检查）
@@ -455,9 +463,11 @@ UPLOAD_DIR = "data/uploads"
 
 def _check_file_type_magic(raw_data: bytes) -> str | None:
     """
-    层级 3: 魔术字节校验。
+    层级 3: 魔术字节校验（自定义实现，兼容 Python 3.13+）。
     通过文件前几个字节（magic bytes）判断真实文件类型，
     防止攻击者将 .php 改名为 .jpg 绕过扩展名检查。
+
+    imghdr 在 Python 3.13 中已移除，此处使用自定义魔术签名表替代。
 
     Args:
         raw_data: 文件内容字节流
@@ -465,10 +475,15 @@ def _check_file_type_magic(raw_data: bytes) -> str | None:
     Returns:
         小写的真实图片类型（png/jpeg/gif/webp），非图片返回 None
     """
-    # imghdr.what 读取文件头魔术字节判断类型
-    detected = imghdr.what(None, h=raw_data[:32])
-    if detected is not None and detected in ALLOWED_IMGHDR_TYPES:
-        return detected
+    header = raw_data[:32]
+    for magic, offset, img_type in _MAGIC_SIGNATURES:
+        if header[offset:offset + len(magic)] == magic:
+            # WebP 额外校验: RIFF 后 8-11 字节应为 "WEBP"
+            if img_type == "webp" and len(header) >= 12:
+                if header[8:12] == b"WEBP":
+                    return "webp"
+                continue
+            return img_type
     return None
 
 
