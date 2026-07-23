@@ -291,6 +291,40 @@ body {
     font-weight: 600;
 }
 
+/* 帮助中心按钮 */
+.btn-help {
+    background: #3498db;
+    color: #fff;
+    margin-right: 10px;
+}
+
+.btn-help:hover {
+    opacity: 0.9;
+}
+
+/* 动态页面内容 */
+.page-card h2 {
+    font-size: 20px;
+    margin-bottom: 16px;
+    color: #333;
+}
+
+.help-section {
+    margin-bottom: 20px;
+}
+
+.help-section h3 {
+    font-size: 15px;
+    color: #2c3e50;
+    margin-bottom: 6px;
+}
+
+.help-section p {
+    color: #666;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
 /* 文件上传输入 */
 .file-input {
     padding: 8px 10px;

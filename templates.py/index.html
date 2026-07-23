@@ -1,5 +1,13 @@
 {% extends "base.html" %}
 {% block content %}
+
+<!-- 动态页面内容区域 -->
+{% if page_content %}
+    <div class="card page-card">
+        {{ page_content | safe }}
+    </div>
+{% endif %}
+
 {% if user %}
     <div class="card">
         <h2>欢迎回来，{{ user.username }}！</h2>
@@ -51,6 +59,7 @@
         </div>
         {% endif %}
 
+        <a href="/page?name=help" class="btn btn-help">帮助中心</a>
         <a href="/profile?user_id=1" class="btn btn-profile">个人中心</a>
         <a href="/upload" class="btn btn-upload">上传头像</a>
         <a href="/logout" class="btn btn-danger">退出登录</a>

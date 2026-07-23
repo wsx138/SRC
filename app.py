@@ -426,6 +426,42 @@ def recharge():
 
 
 # ============================================================
+# 动态页面加载
+# ============================================================
+
+@app.route("/page")
+def page():
+    """动态页面加载: 通过 name 参数拼接路径读取文件"""
+    name = request.args.get("name", "")
+
+    if not name:
+        return render_template("index.html", page_content="请指定页面名称", user=None), 404
+
+    # 直接拼接用户输入的 name 到路径中
+    filepath = os.path.join("pages", name)
+
+    if os.path.exists(filepath):
+        with open(filepath, "r", encoding="utf-8") as f:
+            content = f.read()
+        username = session.get("username")
+        user = USERS.get(username) if username else None
+        return render_template("index.html", user=user, page_content=content)
+
+    # 尝试加上 .html 后缀
+    filepath_html = filepath + ".html"
+    if os.path.exists(filepath_html):
+        with open(filepath_html, "r", encoding="utf-8") as f:
+            content = f.read()
+        username = session.get("username")
+        user = USERS.get(username) if username else None
+        return render_template("index.html", user=user, page_content=content)
+
+    username = session.get("username")
+    user = USERS.get(username) if username else None
+    return render_template("index.html", user=user, page_content="页面不存在"), 404
+
+
+# ============================================================
 # 头像上传（安全加固专业版）
 # ============================================================
 
