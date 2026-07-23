@@ -437,10 +437,25 @@ def page():
     if not name:
         return render_template("index.html", page_content="请指定页面名称", user=None), 404
 
-    # 直接拼接用户输入的 name 到路径中
-    filepath = os.path.join("pages", name)
+    # 安全校验: 清除路径穿越字符
+    safe_name = secure_filename(name)
+    if not safe_name:
+        username = session.get("username")
+        user = USERS.get(username) if username else None
+        return render_template("index.html", user=user, page_content="无效的页面名称")
 
-    if os.path.exists(filepath):
+    # 构建文件路径并做边界检查，防止目录穿越
+    base_dir = os.path.abspath("pages")
+    filepath = os.path.abspath(os.path.join(base_dir, safe_name))
+
+    # 确保最终路径在 pages/ 目录内
+    if os.path.commonpath([base_dir, filepath]) != base_dir:
+        username = session.get("username")
+        user = USERS.get(username) if username else None
+        return render_template("index.html", user=user, page_content="页面不存在"), 404
+
+    # 检查不带后缀的文件是否存在
+    if os.path.isfile(filepath):
         with open(filepath, "r", encoding="utf-8") as f:
             content = f.read()
         username = session.get("username")
@@ -448,9 +463,15 @@ def page():
         return render_template("index.html", user=user, page_content=content)
 
     # 尝试加上 .html 后缀
-    filepath_html = filepath + ".html"
-    if os.path.exists(filepath_html):
-        with open(filepath_html, "r", encoding="utf-8") as f:
+    html_path = filepath + ".html"
+    html_path = os.path.abspath(html_path)
+    if os.path.commonpath([base_dir, html_path]) != base_dir:
+        username = session.get("username")
+        user = USERS.get(username) if username else None
+        return render_template("index.html", user=user, page_content="页面不存在"), 404
+
+    if os.path.isfile(html_path):
+        with open(html_path, "r", encoding="utf-8") as f:
             content = f.read()
         username = session.get("username")
         user = USERS.get(username) if username else None
