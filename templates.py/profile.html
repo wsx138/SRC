@@ -24,10 +24,11 @@
             </form>
         </div>
 
-        <!-- 修改密码表单 -->
+        <!-- 修改密码表单（安全加固版：含 CSRF Token） -->
         <div class="search-section">
             <h3>修改密码</h3>
             <form method="post" action="/change-password" class="recharge-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <input type="hidden" name="username" value="{{ profile_user.username }}">
                 <div class="form-group">
                     <label for="new_password">新密码</label>

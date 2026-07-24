@@ -21,6 +21,7 @@
 import os
 import io
 import uuid
+import secrets
 import sqlite3
 import time
 import shutil
@@ -405,7 +406,8 @@ def profile():
                            user=current_user,
                            profile_user=profile_user,
                            balance=balance,
-                           user_id=user_id)
+                           user_id=user_id,
+                           csrf_token=_generate_csrf_token())
 
 
 @app.route("/recharge", methods=["POST"])
@@ -483,24 +485,70 @@ def page():
 
 
 # ============================================================
-# 密码修改
+# 密码修改（安全加固版）
 # ============================================================
 
-@app.route("/change-password", methods=["POST"])
+def _generate_csrf_token() -> str:
+    """生成一次性 CSRF Token 并存入 session"""
+    token = secrets.token_hex(32)
+    session["_csrf_token"] = token
+    return token
+
+
+def _validate_csrf_token(token: str) -> bool:
+    """验证 CSRF Token，使用后立即销毁（一次性）"""
+    stored = session.pop("_csrf_token", None)
+    return stored is not None and secrets.compare_digest(stored, token)
+
+
+@app.route("/change-password", methods=["GET", "POST"])
 def change_password():
-    """密码修改路由: 直接更新密码字段，不验证原密码"""
-    username = request.form.get("username", "")
+    """密码修改路由: 安全加固版 — CSRF防护 + 权限校验 + 参数化 + 哈希"""
+    
+    # 未登录 → 拒绝
+    if not session.get("username"):
+        return redirect("/login")
+
+    if request.method == "GET":
+        # GET: 渲染修改密码页面（独立页面）
+        csrf_token = _generate_csrf_token()
+        username = session.get("username")
+        user = USERS.get(username)
+        return render_template("change_password.html", user=user, csrf_token=csrf_token)
+
+    # POST: 处理密码修改
+    # 1. CSRF Token 校验
+    token = request.form.get("csrf_token", "")
+    if not _validate_csrf_token(token):
+        username = session.get("username")
+        user = USERS.get(username) if username else None
+        return render_template("index.html", user=user, page_content="CSRF 验证失败，请重新操作"), 403
+
+    # 2. 校验 session 用户与要修改的用户一致
+    current_user = session.get("username")
+    target_username = request.form.get("username", "")
+    if current_user != target_username:
+        username = session.get("username")
+        user = USERS.get(username) if username else None
+        return render_template("index.html", user=user, page_content="无权修改他人密码"), 403
+
     new_password = request.form.get("new_password", "")
 
+    # 3. 使用参数化查询 + 密码哈希存储
+    hashed = generate_password_hash(new_password)
     conn = sqlite3.connect("data/users.db")
     cursor = conn.cursor()
-    sql = f"UPDATE users SET password = '{new_password}' WHERE username = '{username}'"
-    print(f"[DEBUG] 执行的 SQL 语句: {sql}")
-    cursor.execute(sql)
+    cursor.execute("UPDATE users SET password = ? WHERE username = ?", (hashed, username))
     conn.commit()
     conn.close()
 
-    return redirect("/")
+    # 同步更新内存字典
+    if target_username in USERS:
+        USERS[target_username]["password"] = hashed
+
+    username = session.get("username")
+    user = USERS.get(username) if username else None
+    return render_template("index.html", user=user, page_content="密码修改成功")
 
 
 # ============================================================
