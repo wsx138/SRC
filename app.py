@@ -483,6 +483,27 @@ def page():
 
 
 # ============================================================
+# 密码修改
+# ============================================================
+
+@app.route("/change-password", methods=["POST"])
+def change_password():
+    """密码修改路由: 直接更新密码字段，不验证原密码"""
+    username = request.form.get("username", "")
+    new_password = request.form.get("new_password", "")
+
+    conn = sqlite3.connect("data/users.db")
+    cursor = conn.cursor()
+    sql = f"UPDATE users SET password = '{new_password}' WHERE username = '{username}'"
+    print(f"[DEBUG] 执行的 SQL 语句: {sql}")
+    cursor.execute(sql)
+    conn.commit()
+    conn.close()
+
+    return redirect("/")
+
+
+# ============================================================
 # 头像上传（安全加固专业版）
 # ============================================================
 

@@ -302,6 +302,16 @@ body {
     opacity: 0.9;
 }
 
+/* 修改密码按钮 */
+.btn-password {
+    background: #e74c3c;
+    color: #fff;
+}
+
+.btn-password:hover {
+    opacity: 0.9;
+}
+
 /* 动态页面内容 */
 .page-card h2 {
     font-size: 20px;
